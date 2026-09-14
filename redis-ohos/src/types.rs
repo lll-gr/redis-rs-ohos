@@ -336,3 +336,96 @@ impl RedisInfo {
     }
 }
 
+/// TLS Certificate Configuration
+///
+/// Configuration for TLS/SSL connections with custom certificates.
+///
+/// # Example (ArkTS)
+/// ```typescript
+/// const tlsConfig: TlsConfig = {
+///   clientCert: readFileAsString("client-cert.pem"),
+///   clientKey: readFileAsString("client-key.pem"),
+///   rootCert: readFileAsString("ca-cert.pem")
+/// };
+/// ```
+#[napi(object)]
+#[derive(Debug, Clone)]
+pub struct TlsConfig {
+    /// Client certificate in PEM format (for mTLS)
+    pub client_cert: Option<String>,
+
+    /// Client private key in PEM format (for mTLS)
+    pub client_key: Option<String>,
+
+    /// Root CA certificate in PEM format
+    pub root_cert: Option<String>,
+}
+
+/// Sentinel Node Configuration
+///
+/// Configuration for connecting to Redis Sentinel nodes.
+///
+/// # Example (ArkTS)
+/// ```typescript
+/// const sentinelConfig: SentinelNodeConfig = {
+///   tlsMode: "secure",
+///   username: "sentinel_user",
+///   password: "sentinel_pass",
+///   db: 0
+/// };
+/// ```
+#[napi(object)]
+#[derive(Debug, Clone)]
+pub struct SentinelNodeConfig {
+    /// TLS mode: "none", "secure", or "insecure"
+    pub tls_mode: Option<String>,
+
+    /// Username for authentication
+    pub username: Option<String>,
+
+    /// Password for authentication
+    pub password: Option<String>,
+
+    /// Database index
+    pub db: Option<i32>,
+}
+
+/// Cluster Client Configuration
+///
+/// Configuration for Redis Cluster connections.
+///
+/// # Example (ArkTS)
+/// ```typescript
+/// const clusterConfig: ClusterConfig = {
+///   username: "cluster_user",
+///   password: "cluster_pass",
+///   readFromReplicas: true,
+///   connectionTimeoutMs: 5000,
+///   responseTimeoutMs: 3000
+/// };
+/// ```
+#[napi(object)]
+#[derive(Debug, Clone)]
+pub struct ClusterConfig {
+    /// Username for authentication
+    pub username: Option<String>,
+
+    /// Password for authentication
+    pub password: Option<String>,
+
+    /// Whether to read from replica nodes (default: false)
+    pub read_from_replicas: Option<bool>,
+
+    /// Connection timeout in milliseconds
+    pub connection_timeout_ms: Option<u32>,
+
+    /// Response timeout in milliseconds
+    pub response_timeout_ms: Option<u32>,
+
+    /// Use TLS/SSL connection
+    pub use_tls: Option<bool>,
+
+    /// TLS mode: "secure" or "insecure"
+    pub tls_mode: Option<String>,
+}
+

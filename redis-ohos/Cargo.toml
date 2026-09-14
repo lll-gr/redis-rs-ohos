@@ -15,6 +15,9 @@ redis = { path = "../redis", features = [
   "tokio-comp",
   "connection-manager",
   "json",
+  "cluster",
+  "sentinel",
+  "tls-rustls",
 ] }
 
 # NAPI dependencies for HarmonyOS

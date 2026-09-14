@@ -16,6 +16,14 @@ pub struct RedisClient {
     inner: Client,
 }
 
+impl RedisClient {
+    /// Create a RedisClient from an existing redis::Client
+    /// This is used internally by other modules
+    pub(crate) fn from_inner(client: Client) -> Self {
+        RedisClient { inner: client }
+    }
+}
+
 #[napi]
 impl RedisClient {
     /// Create a new Redis client from URL
