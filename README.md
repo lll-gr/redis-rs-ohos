@@ -1,287 +1,167 @@
-# redis-rs
+# redis-rs-ohos
 
-[![Rust](https://github.com/redis-rs/redis-rs/actions/workflows/rust.yml/badge.svg)](https://github.com/redis-rs/redis-rs/actions/workflows/rust.yml)
-[![crates.io](https://img.shields.io/crates/v/redis.svg)](https://crates.io/crates/redis)
-[![Chat](https://img.shields.io/discord/976380008299917365?logo=discord)](https://discord.gg/WHKcJK9AKP)
+> 基于 [redis-rs](https://github.com/redis-rs/redis-rs) 的 **HarmonyOS / OpenHarmony Redis 客户端 SDK**，通过 N-API（ohrs）桥接，为 ArkTS 提供高性能、类型安全的 Redis 操作能力。
 
-Redis-rs is a high level Rust library for Redis, Valkey and any other RESP 
-(Redis Serialization Protocol) compliant DB. It provides convenient access
-to all Redis functionality through a very flexible but low-level API. It
-uses a customizable type conversion trait so that any operation can return
-results in just the type you are expecting. This makes for a very pleasant
-development experience.
+[![Rust](https://img.shields.io/badge/Rust-1.70%2B-orange)](https://www.rust-lang.org/)
+[![HarmonyOS](https://img.shields.io/badge/HarmonyOS-NEXT-007dff)](https://www.harmonyos.com/)
+[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+[![关联项目](https://img.shields.io/badge/关联-OhRedisTool-blue)](https://github.com/lll-gr/OhRedisTool)
 
-The crate is called `redis` and you can depend on it via cargo:
+---
 
-```ini
-[dependencies]
-redis = "1.0.0-rc.3"
+## 这是什么？
+
+`redis-rs-ohos` 是上游 [redis-rs](https://github.com/redis-rs/redis-rs) 的 HarmonyOS 适配分支，在保留 redis-rs 完整协议实现的基础上，新增了 `redis-ohos` crate，将 Rust 侧的 Redis 客户端能力通过 N-API 暴露给 ArkTS / TypeScript 层。
+
+它是鸿蒙原生应用 **[OhRedisTool](https://github.com/lll-gr/OhRedisTool)**（Redis 可视化管理工具）的底层 Native 核心，同时也可以独立集成到任何 HarmonyOS 工程中。
+
+## 特性
+
+- **完整 Redis 命令支持**：字符串、哈希、列表、集合、有序集合、Stream 等常用数据类型全覆盖
+- **同步 + 异步 API**：基于 tokio 的异步连接与连接管理器，支持自动重连
+- **高级连接模式**：TLS（rustls）、Redis Cluster、Sentinel 哨兵
+- **类型安全**：构建时自动生成 TypeScript / ArkTS 类型声明（`index.d.ts`）
+- **HarmonyOS 原生日志**：集成 HiLog，Rust 侧日志自动输出到 hilog
+- **高性能**：底层基于久经生产考验的 redis-rs，release 构建启用 LTO
+- **零 WebView**：纯 Native 动态库（`.so`），不依赖任何 JS 运行时
+
+## 关联项目
+
+| 项目 | 说明 |
+| --- | --- |
+| [OhRedisTool](https://github.com/lll-gr/OhRedisTool) | 鸿蒙原生 Redis 可视化管理工具（本 SDK 的上层应用） |
+| [redis-rs](https://github.com/redis-rs/redis-rs) | 上游 Rust Redis 客户端库（本项目 fork 自它） |
+| [ohrs](https://github.com/ohos-rs/ohrs) | OpenHarmony / HarmonyOS N-API 绑定框架 |
+
+## 项目结构
+
+```
+redis-rs-ohos/
+├── redis/                  # 上游 redis-rs 核心库（fork，保持同步）
+├── redis-ohos/             # ⭐ HarmonyOS N-API 桥接 crate（本项目核心）
+│   ├── src/
+│   │   ├── lib.rs          # N-API 模块入口
+│   │   ├── client.rs       # RedisClient 封装
+│   │   ├── connection.rs   # 同步连接
+│   │   ├── json_connection.rs
+│   │   ├── cluster_client.rs    # Redis Cluster 客户端
+│   │   ├── sentinel_client.rs   # Sentinel 哨兵客户端
+│   │   ├── tls_config.rs        # TLS 配置
+│   │   ├── types.rs        # 类型转换（RedisValue ⇄ JsValue）
+│   │   └── native_log.rs   # HiLog 桥接
+│   ├── examples/           # ArkTS 使用示例（.ets）
+│   ├── scripts/            # 构建脚本（交叉编译、打包）
+│   ├── Makefile            # 构建入口（make build-release / make install）
+│   ├── QUICKSTART.md       # 快速上手指南
+│   ├── README_CN.md        # redis-ohos 详细中文文档
+│   ├── ADVANCED_FEATURES.md
+│   ├── COMMAND_COVERAGE.md # 命令覆盖清单
+│   └── STREAM_COMMANDS.md  # Stream 命令文档
+├── ohrs_example/           # ohrs 框架示例（参考用）
+├── redis-test/             # 测试
+├── Cargo.toml              # workspace 根配置
+└── README.md               # 本文件
 ```
 
-Documentation on the library can be found at
-[docs.rs/redis](https://docs.rs/redis).
+## 快速开始
 
-## Basic Operation
+### 1. 环境准备
 
-To open a connection you need to create a client and then to fetch a
-connection from it.
+```bash
+# 安装 Rust
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-Many commands are implemented through the `TypedCommands` or `Commands` traits but manual
-command creation is also possible. The `TypedCommands` trait provides pre-specified and opinionated return value types to commands,
-but if you want to use other return value types, you can use `Commands` as long as the chosen return value type
-implements the `FromRedisValue` trait.
+# 安装 ohrs（HarmonyOS N-API 构建工具）
+cargo install ohrs
 
-```rust
-use redis::TypedCommands;
+# 添加 HarmonyOS 交叉编译目标
+rustup target add aarch64-unknown-linux-ohos
+```
 
-fn fetch_an_integer() -> redis::RedisResult<isize> {
-	// connect to redis
-	let client = redis::Client::open("redis://127.0.0.1/")?;
-	let mut con = client.get_connection()?;
-	// `set` returns a `()`, so we don't need to specify the return type manually unlike in the previous example.
-	con.set("my_key", 42)?;
-	// `get_int` returns Option<isize>, as the key may not be found.
-	con.get_int("my_key").unwrap()
+> 还需要 DevEco Studio 内置的 HarmonyOS NDK，并配置好对应的环境变量（`OHOS_NDK_HOME` 等）。
+
+### 2. 构建 SDK
+
+```bash
+cd redis-ohos
+
+# 检查环境
+make check
+
+# 构建 release 版本（启用 LTO）
+make build-release
+```
+
+构建产物输出到 `redis-ohos/harmonyos-build/`，包含：
+- `arm64-v8a/libredis_ohos.so`（真机）
+- `x86_64/libredis_ohos.so`（模拟器）
+- `index.d.ts`（ArkTS 类型声明）
+- `oh-package.json5`
+
+### 3. 安装到 HarmonyOS 工程
+
+```bash
+# 方式 A：Make 一键安装（推荐）
+make install OHOS_PROJECT_PATH=/path/to/your/harmonyos/project
+
+# 方式 B：手动复制
+cp -r harmonyos-build/* /path/to/your/project/entry/libs/
+```
+
+在工程的 `entry/oh-package.json5` 中添加依赖：
+
+```json5
+{
+  "dependencies": {
+    "libredis_ohos.so": "file:./libs"
+  }
 }
 ```
 
-```rust
-use redis::Commands;
+### 4. ArkTS 中使用
 
-fn fetch_an_integer() -> redis::RedisResult<isize> {
-    // connect to redis
-    let client = redis::Client::open("redis://127.0.0.1/")?;
-    let mut con = client.get_connection()?;
-    // throw away the result, just make sure it does not fail
-    let _: () = con.set("my_key", 42)?;
-    // read back the key and return it.  Because the return value
-    // from the function is a result for integer this will automatically
-    // convert into one.
-    con.get("my_key")
-}
+```typescript
+import { RedisClient, initLogging } from 'libredis_ohos.so';
+
+// 初始化日志（可选）
+initLogging(0xD001000, 'MyApp');
+
+// 创建客户端
+const client = new RedisClient('redis://127.0.0.1:6379');
+
+// 获取连接并执行命令
+const conn = client.getConnection();
+console.log(conn.ping()); // "PONG"
+
+conn.set('hello', 'world');
+console.log(conn.get('hello')); // "world"
+
+// 哈希操作
+conn.hset('user:1', 'name', '张三');
+console.log(conn.hget('user:1', 'name')); // "张三"
 ```
 
-Variables are converted to and from the Redis format for a wide variety of types
-(`String`, num types, tuples, `Vec<u8>`). If you want to use it with your own types,
-you can implement the `FromRedisValue` and `ToRedisArgs` traits, or derive it with the
-[redis-macros](https://github.com/daniel7grant/redis-macros/#json-wrapper-with-redisjson) crate.
+更多示例见 [`redis-ohos/examples/`](redis-ohos/examples/)，详细文档见 [`redis-ohos/README_CN.md`](redis-ohos/README_CN.md) 与 [`redis-ohos/QUICKSTART.md`](redis-ohos/QUICKSTART.md)。
 
-## Async support
+## 与上游 redis-rs 的关系
 
-To enable asynchronous clients, enable the relevant feature in your Cargo.toml,
-`tokio-comp` for tokio users, `smol-comp` for smol users.
+本项目 fork 自 [redis-rs/redis-rs](https://github.com/redis-rs/redis-rs)，`redis/` 目录保持与上游同步，所有 HarmonyOS 相关的改动集中在新增的 `redis-ohos/` crate 中，不侵入上游核心代码。上游的 MIT 许可证继续适用。
 
-```
-# if you use tokio
-redis = { version = "1.0.0-rc.3", features = ["tokio-comp"] }
+## 开发
 
-# if you use smol
-redis = { version = "1.0.0-rc.3", features = ["smol-comp"] }
-```
+```bash
+# 构建核心库
+cargo build --locked -p redis
 
-You can then use either the `AsyncTypedCommands` or `AsyncCommands` traits. All async connections are cheap to clone, and clones can be used concurrently from multiple threads.
+# 构建 redis-ohos
+cd redis-ohos && make build-release
 
-## Connection Pooling
-
-When using a sync connection, it is recommended to use a connection pool in order to handle
-disconnects or multi-threaded usage. This can be done using the `r2d2` feature.
-
-```
-redis = { version = "1.0.0-rc.3", features = ["r2d2"] }
+# 代码检查
+cargo clippy --all-features --all --tests --examples
 ```
 
-For async connections, connection pooling isn't necessary, unless blocking commands are used.
-The `MultiplexedConnection` is cheaply cloneable and can be used safely from multiple threads, so a 
-single connection can be easily reused. For automatic reconnections consider using 
-`ConnectionManager` with the `connection-manager` feature.
-Async cluster connections also don't require pooling and are thread-safe and reusable.
+## 许可证
 
-Multiplexing won't help if blocking commands are used since the server won't handle commands
-from blocked connections until the connection is unblocked. If you want to be able to handle
-non-blocking commands concurrently with blocking commands, you should send the blocking
-commands on another connection.
+[MIT](LICENSE) © lllgr
 
-## TLS Support
-
-To enable TLS support, you need to use the relevant feature entry in your Cargo.toml.
-Currently, `native-tls` and `rustls` are supported.
-
-To use `native-tls`:
-
-```
-redis = { version = "1.0.0-rc.3", features = ["tls-native-tls"] }
-
-# if you use tokio
-redis = { version = "1.0.0-rc.3", features = ["tokio-native-tls-comp"] }
-
-# if you use smol
-redis = { version = "1.0.0-rc.3", features = ["smol-native-tls-comp"] }
-```
-
-To use `rustls`:
-
-```
-redis = { version = "1.0.0-rc.3", features = ["tls-rustls"] }
-
-# if you use tokio
-redis = { version = "1.0.0-rc.3", features = ["tokio-rustls-comp"] }
-
-# if you use smol
-redis = { version = "1.0.0-rc.3", features = ["smol-rustls-comp"] }
-```
-
-Add `rustls` to dependencies
-
-```
-rustls = { version = "0.23" }
-```
-
-And then, before creating a connection, ensure that you install a crypto provider. For example:
-
-```rust
-    rustls::crypto::ring::default_provider()
-        .install_default()
-        .expect("Failed to install rustls crypto provider");
-```
-
-
-With `rustls`, you can add the following feature flags on top of other feature flags to enable additional features:
-
--   `tls-rustls-insecure`: Allow insecure TLS connections
--   `tls-rustls-webpki-roots`: Use `webpki-roots` (Mozilla's root certificates) instead of native root certificates
-
-then you should be able to connect to a redis instance using the `rediss://` URL scheme:
-
-```rust
-let client = redis::Client::open("rediss://127.0.0.1/")?;
-```
-
-To enable insecure mode, append `#insecure` at the end of the URL:
-
-```rust
-let client = redis::Client::open("rediss://127.0.0.1/#insecure")?;
-```
-
-## Cluster Support
-
-Support for Redis Cluster can be enabled by enabling the `cluster` feature in your Cargo.toml:
-
-`redis = { version = "1.0.0-rc.3", features = [ "cluster"] }`
-
-Then you can simply use the `ClusterClient`, which accepts a list of available nodes. Note
-that only one node in the cluster needs to be specified when instantiating the client, though
-you can specify multiple.
-
-```rust
-use redis::cluster::ClusterClient;
-use redis::TypedCommands;
-
-fn fetch_an_integer() -> String {
-    let nodes = vec!["redis://127.0.0.1/"];
-    let client = ClusterClient::new(nodes).unwrap();
-    let mut connection = client.get_connection().unwrap();
-    connection.set("test", "test_data").unwrap();
-    return connection.get("test").unwrap();
-}
-```
-
-Async Redis Cluster support can be enabled by enabling the `cluster-async` feature, along
-with your preferred async runtime, e.g.:
-
-`redis = { version = "1.0.0-rc.3", features = [ "cluster-async", "tokio-std-comp" ] }`
-
-```rust
-use redis::cluster::ClusterClient;
-use redis::AsyncTypedCommands;
-
-async fn fetch_an_integer() -> String {
-    let nodes = vec!["redis://127.0.0.1/"];
-    let client = ClusterClient::new(nodes).unwrap();
-    let mut connection = client.get_async_connection().await.unwrap();
-    connection.set("test", "test_data").await.unwrap();
-    return connection.get("test").await.unwrap();
-}
-```
-
-## JSON Support
-
-Support for the RedisJSON Module can be enabled by specifying "json" as a feature in your Cargo.toml.
-
-`redis = { version = "1.0.0-rc.3", features = ["json"] }`
-
-Then you can simply import the `JsonCommands` trait which will add the `json` commands to all Redis Connections (not to be confused with just `Commands` which only adds the default commands)
-
-```rust
-use redis::Client;
-use redis::JsonCommands;
-use redis::RedisResult;
-use redis::ToRedisArgs;
-
-// Result returns Ok(true) if the value was set
-// Result returns Err(e) if there was an error with the server itself OR serde_json was unable to serialize the boolean
-fn set_json_bool<P: ToRedisArgs>(key: P, path: P, b: bool) -> RedisResult<bool> {
-    let client = Client::open("redis://127.0.0.1").unwrap();
-    let connection = client.get_connection().unwrap();
-
-    // runs `JSON.SET {key} {path} {b}`
-    connection.json_set(key, path, b)?
-}
-
-```
-
-To parse the results, you'll need to use `serde_json` (or some other json lib) to deserialize
-the results from the bytes. It will always be a `Vec`, if no results were found at the path it'll
-be an empty `Vec`. If you want to handle deserialization and `Vec` unwrapping automatically,
-you can use the `Json` wrapper from the
-[redis-macros](https://github.com/daniel7grant/redis-macros/#json-wrapper-with-redisjson) crate.
-
-## Webassembly Support
-
-redis-rs tests that webassembly succesfully builds for the sync client work, but today async support isn't enabled, and the webassembly builds aren't tested against a database.
-
-## Development
-
-To test `redis` you're going to need to be able to test with the Redis Modules, to do this
-you must set the following environment variable before running the test script
-
--   `REDIS_RS_REDIS_JSON_PATH` = The absolute path to the RedisJSON module (Either `librejson.so` for Linux or `librejson.dylib` for MacOS).
-
--   Please refer to this [link](https://github.com/RedisJSON/RedisJSON) to access the RedisJSON module:
-
-<!-- As support for modules are added later, it would be wise to update this list -->
-
-If you want to develop on the library there are a few commands provided
-by the makefile:
-
-To build the core crate:
-
-    $ cargo build --locked -p redis
-
-To test:
-
-Note: `make test` requires cargo-nextest installed, to learn more about it please visit [homepage of cargo-nextest](https://nexte.st/).
-
-
-    $ make test
-    
-To run benchmarks:
-
-    $ make bench
-
-To build the docs (require nightly compiler, see [rust-lang/rust#43781](https://github.com/rust-lang/rust/issues/43781)):
-
-    $ make docs
-
-We encourage you to run `clippy` prior to seeking a merge for your work. The lints can be quite strict. Running this on your own workstation can save you time, since Travis CI will fail any build that doesn't satisfy `clippy`:
-
-    $ cargo clippy --all-features --all --tests --examples -- -D clippy::all -D warnings
-
-To run fuzz tests with afl, first install cargo-afl (`cargo install -f afl`),
-then run:
-
-    $ make fuzz
-
-If the fuzzer finds a crash, in order to reproduce it, run:
-
-    $ cd afl/<target>/
-    $ cargo run --bin reproduce -- out/crashes/<crashfile>
+上游 redis-rs 同样基于 MIT 许可证。
